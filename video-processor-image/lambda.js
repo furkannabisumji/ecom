@@ -12,7 +12,7 @@ export const handler = async (event) => {
         containerOverrides: [{
           name: 'video',
           environment: [
-            { name: 'KEY', value: body.Records[0].s3.object.key.split("/")[0] } 
+            { name: 'KEY', value: body.Records[0].s3.object.key } 
           ],
         }],
       },
