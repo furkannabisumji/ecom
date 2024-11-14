@@ -24,28 +24,29 @@ const r2 = new S3Client({
   endpoint: process.env.R2_ENDPOINT
 });
 
-const downloadVideo = async ()=>{
+const downloadVideo = async () => {
+  const { Body } = await s3.send(new GetObjectCommand({
+      Bucket: process.env.TEMP_BUCKET,
+      Key: process.env.KEY,
+  }));
 
-    const { Body } = await s3.send(new GetObjectCommand(
-      {
-        Bucket: process.env.TEMP_BUCKET,
-        Key: `${process.env.KEY}/input.mp4`, 
-      }
-    ));
+  const readableStream = sdkStreamMixin(Body);
 
-    const readableStream = sdkStreamMixin(Body);
+  const outputDir = path.join('./output/raw');
+  fs.mkdirSync(outputDir, { recursive: true });
 
-    const writableStream =  fs.createWriteStream(path.join(`./output/raw/${process.env.KEY}`, 'input.mp4'));
+  const writableStream = fs.createWriteStream(path.join(outputDir, path.basename(process.env.KEY)));
 
-    readableStream.pipe(writableStream);
+  readableStream.pipe(writableStream);
 
-    await new Promise((resolve, reject) => {
-        writableStream.on('error', reject);
-        writableStream.on('finish', resolve);
-    });
+  await new Promise((resolve, reject) => {
+      writableStream.on('error', reject);
+      writableStream.on('finish', resolve);
+  });
 
-    console.log('File downloaded successfully!');    
-}
+  console.log('File downloaded successfully!');
+};
+
 
 const uploadVideo = async (output) => { 
   console.log(`Uploading ${output}...`);
@@ -61,13 +62,14 @@ const uploadVideo = async (output) => {
 const processVideo = async () => {
   const baseDir = path.join('./output');
   const key = process.env.KEY;
-  
-  fs.mkdirSync(path.join(baseDir, 'raw', key), { recursive: true });
-  fs.mkdirSync(path.join(baseDir, 'formats', key), { recursive: true });
-  fs.mkdirSync(path.join(baseDir, 'hls', key), { recursive: true });
+  const fileName = path.basename(key);
+  const nameWithoutExt = fileName.replace(path.extname(fileName), ''); 
+
+  fs.mkdirSync(path.join(baseDir, 'raw'), { recursive: true });
+  fs.mkdirSync(path.join(baseDir, 'formats', nameWithoutExt), { recursive: true });
+  fs.mkdirSync(path.join(baseDir, 'hls', nameWithoutExt), { recursive: true });
 
   await downloadVideo();
-  await uploadVideo(`/raw/${key}/input.mp4`);
 
   const formats = [
     { bitrate: '500k', resolution: '426x240', output: 'output_500k_240p.mp4' },
@@ -79,19 +81,24 @@ const processVideo = async () => {
 
   for (const { bitrate, resolution, output } of formats) {
     console.log(`Encoding video at ${bitrate}, resolution ${resolution}...`);
-    
-    await execAsync(`ffmpeg -i ${baseDir}/raw/${key}/input.mp4 -c:v libx264 -preset fast -b:v ${bitrate} -s ${resolution} -c:a aac -b:a 128k ${baseDir}/formats/${key}/${output}`);
-    await uploadVideo(`/formats/${key}/${output}`);
 
-    await execAsync(`ffmpeg -i ${baseDir}/formats/${key}/${output} -c:v libx264 -c:a aac -f hls -hls_time 10 -hls_list_size 0 -hls_segment_filename '${baseDir}/hls/${key}/segment_%03d.ts' ${baseDir}/hls/${key}/playlist.m3u8`);
-    await uploadVideo(`/hls/${key}/playlist.m3u8`);
+    const formatOutputPath = path.join(baseDir, 'formats', nameWithoutExt, output);
+
+    await execAsync(`ffmpeg -i ${baseDir}/raw/${fileName} -c:v libx264 -preset fast -b:v ${bitrate} -s ${resolution} -c:a aac -b:a 128k ${formatOutputPath}`);
+    await uploadVideo(`/formats/${nameWithoutExt}/${output}`);
+
+    const hlsOutputDir = path.join(baseDir, 'hls', nameWithoutExt);
+    await execAsync(`ffmpeg -i ${formatOutputPath} -c:v libx264 -c:a aac -f hls -hls_time 10 -hls_list_size 0 -hls_segment_filename '${hlsOutputDir}/segment_%03d.ts' ${hlsOutputDir}/playlist.m3u8`);
+    await uploadVideo(`/hls/${nameWithoutExt}/playlist.m3u8`);
   }
-
-    await s3.send(new DeleteObjectCommand({
-      Bucket: process.env.TEMP_BUCKET,
-      Key: `${key}/input.mp4`
-    }));
-
+  
+  await uploadVideo(`/raw/${fileName}`);
+  await s3.send(new DeleteObjectCommand({
+    Bucket: process.env.TEMP_BUCKET,
+    Key: key
+  }));
 };
+
+
 
 processVideo();
