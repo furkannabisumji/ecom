@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import 'video.js/dist/video-js.css';
+import Navbar from "./compoments/narbar";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -25,11 +27,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
+    <body
+      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+    >
+      <Navbar />{children}
+    </body>
+  </html>
   );
 }

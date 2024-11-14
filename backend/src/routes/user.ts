@@ -60,8 +60,12 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/products', async (req, res) => {
-  const products = await prisma.product.findMany();
-  res.json({ message: products });
+  const products = await prisma.product.findMany({
+    where: {
+      image: { not: null },       
+      video_status: 'PROCESSED'      
+    }
+  });  res.json({ message: products });
 })
 
 export default router;
