@@ -89,7 +89,6 @@ const processVideo = async () => {
     await execAsync(`ffmpeg -i ${formatOutputPath} -c:v libx264 -c:a aac -f hls -hls_time 10 -hls_list_size 0 -hls_segment_filename '${hlsOutputDir}/segment_%03d.ts' ${playlistPath}`);
     await uploadVideo(`/hls/${folder}/${bitrate}/playlist.m3u8`);
 
-    // Add reference to each bitrate in the master playlist
     masterPlaylist += `#EXT-X-STREAM-INF:BANDWIDTH=${bitrate},RESOLUTION=${resolution}\n/hls/${folder}/${bitrate}/playlist.m3u8\n`;
 
     const files = fs.readdirSync(hlsOutputDir);
@@ -100,7 +99,6 @@ const processVideo = async () => {
     }
   }
 
-  // Write the master playlist to file and upload it
   const masterPlaylistPath = path.join(baseDir, 'hls', folder, 'master.m3u8');
   fs.writeFileSync(masterPlaylistPath, masterPlaylist);
   await uploadVideo(`/hls/${folder}/master.m3u8`);
