@@ -62,12 +62,12 @@ const uploadVideo = async (output) => {
 const processVideo = async () => {
   const baseDir = path.join('./output');
   const key = process.env.KEY;
+  const folder = process.env.KEY.split('/')[0];
   const fileName = path.basename(key);
-  const nameWithoutExt = fileName.replace(path.extname(fileName), ''); 
 
   fs.mkdirSync(path.join(baseDir, 'raw'), { recursive: true });
-  fs.mkdirSync(path.join(baseDir, 'formats', nameWithoutExt), { recursive: true });
-  fs.mkdirSync(path.join(baseDir, 'hls', nameWithoutExt), { recursive: true });
+  fs.mkdirSync(path.join(baseDir, 'formats', folder), { recursive: true });
+  fs.mkdirSync(path.join(baseDir, 'hls', folder), { recursive: true });
 
   await downloadVideo();
 
@@ -82,14 +82,21 @@ const processVideo = async () => {
   for (const { bitrate, resolution, output } of formats) {
     console.log(`Encoding video at ${bitrate}, resolution ${resolution}...`);
 
-    const formatOutputPath = path.join(baseDir, 'formats', nameWithoutExt, output);
+    const formatOutputPath = path.join(baseDir, 'formats', folder, output);
 
     await execAsync(`ffmpeg -i ${baseDir}/raw/${fileName} -c:v libx264 -preset fast -b:v ${bitrate} -s ${resolution} -c:a aac -b:a 128k ${formatOutputPath}`);
-    await uploadVideo(`/formats/${nameWithoutExt}/${output}`);
+    await uploadVideo(`/formats/${folder}/${output}`);
 
-    const hlsOutputDir = path.join(baseDir, 'hls', nameWithoutExt);
+    const hlsOutputDir = path.join(baseDir, 'hls', folder, bitrate);
+    fs.mkdirSync(hlsOutputDir, { recursive: true });
     await execAsync(`ffmpeg -i ${formatOutputPath} -c:v libx264 -c:a aac -f hls -hls_time 10 -hls_list_size 0 -hls_segment_filename '${hlsOutputDir}/segment_%03d.ts' ${hlsOutputDir}/playlist.m3u8`);
-    await uploadVideo(`/hls/${nameWithoutExt}/playlist.m3u8`);
+    await uploadVideo(`/hls/${folder}/${bitrate}/playlist.m3u8`);
+    const files = fs.readdirSync(hlsOutputDir);
+    for (const file of files) {
+      if (file.endsWith('.ts')) {
+        await uploadVideo(`/hls/${folder}/${bitrate}/${file}`);
+      }
+    }
   }
   
   await uploadVideo(`/raw/${fileName}`);
